@@ -2,7 +2,7 @@
 
 import math
 from functools import partial
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Tuple
 
 import mlx.core as mx
 
@@ -13,6 +13,7 @@ def make_sampler(
     min_p: float = 0.0,
     min_tokens_to_keep: int = 1,
     top_k: int = -1,
+    beams: int = 1,
 ) -> Callable[mx.array, mx.array]:
     """
     Make a sampler function for use with ``generate_step``.
@@ -28,12 +29,16 @@ def make_sampler(
           be filtered by min_p sampling.
         top_k (int, optional): The top k tokens ranked by probability to constrain
           the sampling to.
+        beams (int, optional): Number of beams for beam search. If > 1, beam search
+          is used instead of other sampling methods. Default: ``1``.
 
     Returns:
         Callable[mx.array, mx.array]:
             A sampler which takes log-probabilities and returns tokens.
     """
-    if temp == 0:
+    if beams > 1:
+        return BeamSearchSampler(beams=beams)
+    elif temp == 0:
         return lambda x: mx.argmax(x, axis=-1)
     elif top_p > 0 and top_p < 1.0:
         return lambda x: top_p_sampling(x, top_p, temp)
@@ -203,6 +208,58 @@ def top_p_sampling(logits: mx.array, top_p: float, temperature: float) -> mx.arr
 @partial(mx.compile, inputs=mx.random.state, outputs=mx.random.state)
 def categorical_sampling(logits, temp):
     return mx.random.categorical(logits * (1 / temp))
+
+
+class BeamSearchSampler:
+    """Beam Search sampling algorithm.
+
+    Attributes:
+        beams (int): Number of beams to maintain during search.
+        samples (int): Alias for beams (matches interface from other samplers).
+    """
+
+    def __init__(self, beams: int = 1):
+        self.beams = beams
+        self.samples = beams
+
+    def __call__(self, logprobs: mx.array, seq_weights: mx.array, _) -> Tuple[mx.array, mx.array, mx.array]:
+        """
+        Perform beam selection for a single generation step.
+
+        Args:
+            logprobs: Shape (batch*beams, vocab) - normalized log probabilities
+            seq_weights: Shape (batch*beams,) - cumulative sequence weights
+            _: Ignored RNG (not needed for deterministic beam search)
+
+        Returns:
+            next_tokens: Selected token indices (batch*beams, 1) 
+            ancestors: Parent beam indices (batch*beams,)
+            scores: Updated cumulative scores (batch*beams,)
+        """
+        batch_size = logprobs.shape[0] // self.beams
+        vocab_size = logprobs.shape[-1]
+
+        # Flatten beam and batch dimensions for processing
+        scores = logprobs + seq_weights[:, None]
+        scores = scores.reshape(batch_size, self.beams * vocab_size)
+
+        # Select top candidates per batch
+        top_scores, top_indices = mx.topk(scores, k=self.beams)
+        
+        # Calculate parent beam indices
+        batch_indices = mx.arange(batch_size) * self.beams
+        batch_offset = batch_indices.reshape(-1, 1)
+        beam_ancestors = top_indices // vocab_size + batch_offset
+
+        # Extract token indices within vocab
+        tokens = top_indices % vocab_size
+
+        # Reshape for batch/beam structure
+        return (
+            tokens.reshape(-1, 1),  # (batch*beams, 1)
+            beam_ancestors.reshape(-1),    # (batch*beams,)
+            top_scores.reshape(-1)         # (batch*beams,)
+        )
 
 
 def make_repetition_penalty(penalty: float, context_size: int = 20):
