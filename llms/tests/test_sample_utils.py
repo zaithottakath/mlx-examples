@@ -1,7 +1,12 @@
 import unittest
 
 import mlx.core as mx
-from mlx_lm.sample_utils import min_p_sampling, top_k_sampling, top_p_sampling
+from mlx_lm.sample_utils import (
+    BeamSearchSampler,
+    min_p_sampling,
+    top_k_sampling,
+    top_p_sampling,
+)
 
 
 class TestSampleUtils(unittest.TestCase):
