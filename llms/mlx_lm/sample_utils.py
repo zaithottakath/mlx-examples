@@ -13,14 +13,15 @@ def make_sampler(
     min_p: float = 0.0,
     min_tokens_to_keep: int = 1,
     top_k: int = -1,
-) -> Callable[mx.array, mx.array]:
+    beam: int = 1,
+) -> Callable:
     """
     Make a sampler function for use with ``generate_step``.
 
     Args:
         temp (float): The temperature for sampling, if 0 the argmax is used.
           Default: ``0``.
-        top_p (float, optional): Nulceus sampling, higher means model considers
+        top_p (float, optional): Nucleus sampling, higher means model considers
           more less likely words.
         min_p (float, optional): The minimum value (scaled by the top token's
           probability) that a token probability must have to be considered.
@@ -28,11 +29,15 @@ def make_sampler(
           be filtered by min_p sampling.
         top_k (int, optional): The top k tokens ranked by probability to constrain
           the sampling to.
+        beam (int, optional): Number of beams for beam search. If beam > 1, a beam search sampler is returned.
 
     Returns:
-        Callable[mx.array, mx.array]:
-            A sampler which takes log-probabilities and returns tokens.
+        Callable:
+            A sampler function which takes log-probabilities and returns tokens.
+            If beam > 1, a BeamSearchSampler is returned.
     """
+    if beam > 1:
+        return BeamSearchSampler(beams=beam, temperature=temp)
     if temp == 0:
         return lambda x: mx.argmax(x, axis=-1)
     elif top_p > 0 and top_p < 1.0:
