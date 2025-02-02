@@ -264,7 +264,8 @@ class BeamSearchSampler:
         # Reshape to (batch, beams * vocab_size)
         weights_reshaped = mx.reshape(weights, (batch, self.beams * vocab_size))
         # Get top k (k = beams) from each batch
-        topk_values, topk_indices = mx.topk(weights_reshaped, k=self.beams, axis=1)
+        topk_indices = mx.topk(weights_reshaped, k=self.beams, axis=1)
+        topk_values = mx.take_along_axis(weights_reshaped, topk_indices, axis=1)
         # Compute beam index and token index
         beam_indices = mx.floor_divide(topk_indices, vocab_size)
         next_token_ids = topk_indices % vocab_size
