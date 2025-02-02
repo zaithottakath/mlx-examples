@@ -1,7 +1,7 @@
 import unittest
 
 import mlx.core as mx
-from mlx_lm.sample_utils import min_p_sampling, top_k_sampling, top_p_sampling
+from mlx_lm.sample_utils import min_p_sampling, top_k_sampling, top_p_sampling, BeamSearchSampler
 
 
 class TestSampleUtils(unittest.TestCase):
@@ -77,7 +77,6 @@ class TestSampleUtils(unittest.TestCase):
 
 
     def test_beam_search_sampler(self):
-        from mlx_lm.sample_utils import BeamSearchSampler
         beams = 2
         temperature = 1.0
         # Create a deterministic case: batch size = 1, beams = 2, vocab_size = 5.
@@ -109,7 +108,6 @@ class TestSampleUtils(unittest.TestCase):
         self.assertEqual(beam_indices.shape, (2,))
         
     def test_beam_search_sampler_multiple_batches(self):
-        from mlx_lm.sample_utils import BeamSearchSampler
         beams = 2
         temperature = 1.0
         # Create a deterministic case with 2 batches, 2 beams, vocab_size = 4.
@@ -137,7 +135,6 @@ class TestSampleUtils(unittest.TestCase):
         self.assertEqual(beam_indices.shape, (4,))
         
     def test_beam_search_sampler_sequence_weights(self):
-        from mlx_lm.sample_utils import BeamSearchSampler
         beams = 2
         temperature = 1.0
         # Simple test with 1 batch, 2 beams, vocab_size = 3.
