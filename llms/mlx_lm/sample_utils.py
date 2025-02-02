@@ -255,7 +255,7 @@ class BeamSearchSampler:
 
     def __call__(self, next_token_logits: mx.array, sequence_weights: mx.array, _):
         # next_token_logits: shape (batch * beams, vocab_size)
-        logprobs = mx.log_softmax(next_token_logits / self.temperature, axis=-1)
+        logprobs = mx.log(mx.softmax(next_token_logits / self.temperature, axis=-1))
         # Add sequence weights: shape (batch * beams,) -> (batch * beams, 1)
         weights = logprobs + mx.expand_dims(sequence_weights, axis=-1)
         # Determine batch size
