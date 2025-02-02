@@ -236,3 +236,35 @@ def make_repetition_penalty(penalty: float, context_size: int = 20):
         return logits
 
     return repetition_penalty_processor
+
+class BeamSearchSampler:
+    """
+    Beam search sampler for sequence generation.
+    This sampler selects the top-B beam tokens for each item.
+    It returns a tuple of (next_token_ids, beam_indices, beam_scores)
+    where next_token_ids is of shape (batch * beams, 1).
+    """
+    def __init__(self, beams: int = 3, temperature: float = 1.0):
+        self.beams = beams
+        self.temperature = temperature
+
+    def __call__(self, next_token_logits: mx.array, sequence_weights: mx.array, _):
+        # next_token_logits: shape (batch * beams, vocab_size)
+        logprobs = mx.log_softmax(next_token_logits / self.temperature, axis=-1)
+        # Add sequence weights: shape (batch * beams,) -> (batch * beams, 1)
+        weights = logprobs + mx.expand_dims(sequence_weights, axis=-1)
+        # Determine batch size
+        batch = sequence_weights.shape[0] // self.beams
+        vocab_size = next_token_logits.shape[-1]
+        # Reshape to (batch, beams * vocab_size)
+        weights_reshaped = mx.reshape(weights, (batch, self.beams * vocab_size))
+        # Get top k (k = beams) from each batch
+        topk_values, topk_indices = mx.topk(weights_reshaped, k=self.beams, axis=1)
+        # Compute beam index and token index
+        beam_indices = mx.floor_divide(topk_indices, vocab_size)
+        next_token_ids = topk_indices % vocab_size
+        # Flatten outputs to (batch * beams, ...)
+        next_token_ids = mx.reshape(next_token_ids, (-1, 1))
+        beam_indices = mx.reshape(beam_indices, (-1,))
+        beam_scores = mx.reshape(topk_values, (-1,))
+        return next_token_ids, beam_indices, beam_scores
