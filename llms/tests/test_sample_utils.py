@@ -108,5 +108,55 @@ class TestSampleUtils(unittest.TestCase):
         self.assertEqual(next_token_ids.shape, (2, 1))
         self.assertEqual(beam_indices.shape, (2,))
         
+    def test_beam_search_sampler_multiple_batches(self):
+        from mlx_lm.sample_utils import BeamSearchSampler
+        beams = 2
+        temperature = 1.0
+        # Create a deterministic case with 2 batches, 2 beams, vocab_size = 4.
+        # For batch0:
+        #   beam0: [5, 1, 1, 1] (clear max at index 0)
+        #   beam1: [2, 6, 2, 2] (clear max at index 1)
+        # For batch1:
+        #   beam0: [1, 1, 1, 1] (all equal, returns index 0)
+        #   beam1: [0, 0, 10, 0] (clear max at index 2)
+        next_token_logits = mx.array([
+            [5, 1, 1, 1],
+            [2, 6, 2, 2],
+            [1, 1, 1, 1],
+            [0, 0, 10, 0]
+        ])
+        # Use zero sequence weights.
+        sequence_weights = mx.zeros((4,), dtype=mx.float32)
+        sampler = BeamSearchSampler(beams=beams, temperature=temperature)
+        next_token_ids, beam_indices, beam_scores = sampler(next_token_logits, sequence_weights, None)
+        expected_next_token_ids = mx.array([[0], [1], [0], [2]])
+        expected_beam_indices = mx.array([0, 1, 0, 1])
+        self.assertTrue(mx.array_equal(next_token_ids, expected_next_token_ids))
+        self.assertTrue(mx.array_equal(beam_indices, expected_beam_indices))
+        self.assertEqual(next_token_ids.shape, (4, 1))
+        self.assertEqual(beam_indices.shape, (4,))
+        
+    def test_beam_search_sampler_sequence_weights(self):
+        from mlx_lm.sample_utils import BeamSearchSampler
+        beams = 2
+        temperature = 1.0
+        # Simple test with 1 batch, 2 beams, vocab_size = 3.
+        next_token_logits = mx.array([
+            [10, 1, 1],
+            [1, 10, 1]
+        ])
+        # First, use zero sequence weights.
+        sequence_weights_zero = mx.array([0, 0], dtype=mx.float32)
+        sampler = BeamSearchSampler(beams=beams, temperature=temperature)
+        next_token_ids_zero, beam_indices_zero, beam_scores_zero = sampler(next_token_logits, sequence_weights_zero, None)
+        # Now, use non-zero sequence weights: beam0 remains same, beam1's score should increase.
+        sequence_weights_bias = mx.array([0, 10], dtype=mx.float32)
+        next_token_ids_bias, beam_indices_bias, beam_scores_bias = sampler(next_token_logits, sequence_weights_bias, None)
+        self.assertTrue(mx.array_equal(next_token_ids_zero, next_token_ids_bias))
+        self.assertTrue(mx.array_equal(beam_indices_zero, beam_indices_bias))
+        # The score for beam1 in sequence_weights_bias should be higher by ~10 compared to zero.
+        diff = beam_scores_bias[1].item() - beam_scores_zero[1].item()
+        self.assertAlmostEqual(diff, 10, places=2)
+        
 if __name__ == "__main__":
     unittest.main()
