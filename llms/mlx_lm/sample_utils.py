@@ -258,25 +258,20 @@ class BeamSearchSampler:
         logprobs = mx.log(mx.softmax(next_token_logits / self.temperature, axis=-1))
         # Add sequence weights: shape (batch * beams,) -> (batch * beams, 1)
         weights = logprobs + mx.expand_dims(sequence_weights, axis=-1)
-        # Determine batch size
+        # Determine batch size and vocab size
         batch = sequence_weights.shape[0] // self.beams
         vocab_size = next_token_logits.shape[-1]
-        # Reshape to (batch, beams * vocab_size)
-        weights_reshaped = mx.reshape(weights, (batch, self.beams * vocab_size))
-        # Add tie-breaking bias to favor lower indices in case of ties.
-        total_dim = self.beams * vocab_size
-        bias = -mx.arange(total_dim, dtype=weights_reshaped.dtype)
-        bias = mx.reshape(bias, (1, total_dim))
-        weights_reshaped_adj = weights_reshaped + bias * 1e-6
-        # Get top k (k = beams) from each batch by selecting the highest values
-        topk_indices = mx.topk(-weights_reshaped_adj, k=self.beams, axis=1)
-        topk_indices = topk_indices.astype(mx.int32)
-        topk_values = mx.take_along_axis(weights_reshaped, topk_indices, axis=1)
-        # Compute beam index and token index
-        beam_indices = mx.floor_divide(topk_indices, vocab_size)
-        next_token_ids = topk_indices % vocab_size
-        # Flatten outputs to (batch * beams, ...)
-        next_token_ids = mx.reshape(next_token_ids, (-1, 1))
-        beam_indices = mx.reshape(beam_indices, (-1,))
-        beam_scores = mx.reshape(topk_values, (-1,))
+        # Reshape weights to (batch, beams, vocab_size)
+        weights_beam = mx.reshape(weights, (batch, self.beams, vocab_size))
+        # For each beam in each batch, select the token with highest weight
+        next_tokens = mx.argmax(weights_beam, axis=-1)  # shape: (batch, beams)
+        beam_scores = mx.max(weights_beam, axis=-1)      # shape: (batch, beams)
+        # Construct beam_indices as the beam position index for each beam candidate.
+        beam_idx = mx.arange(self.beams, dtype=mx.int32)  # shape: (beams,)
+        beam_idx = mx.reshape(beam_idx, (1, self.beams))
+        beam_idx = mx.tile(beam_idx, (batch, 1))           # shape: (batch, beams)
+        # Flatten outputs
+        next_token_ids = mx.reshape(next_tokens, (-1, 1))
+        beam_indices = mx.reshape(beam_idx, (-1,))
+        beam_scores = mx.reshape(beam_scores, (-1,))
         return next_token_ids, beam_indices, beam_scores
