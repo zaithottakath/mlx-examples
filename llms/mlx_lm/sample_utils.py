@@ -263,8 +263,13 @@ class BeamSearchSampler:
         vocab_size = next_token_logits.shape[-1]
         # Reshape to (batch, beams * vocab_size)
         weights_reshaped = mx.reshape(weights, (batch, self.beams * vocab_size))
+        # Add tie-breaking bias to favor lower indices in case of ties.
+        total_dim = self.beams * vocab_size
+        bias = -mx.arange(total_dim, dtype=weights_reshaped.dtype)
+        bias = mx.reshape(bias, (1, total_dim))
+        weights_reshaped_adj = weights_reshaped + bias * 1e-6
         # Get top k (k = beams) from each batch
-        topk_indices = mx.topk(weights_reshaped, k=self.beams, axis=1)
+        topk_indices = mx.topk(weights_reshaped_adj, k=self.beams, axis=1)
         topk_indices = topk_indices.astype(mx.int32)
         topk_values = mx.take_along_axis(weights_reshaped, topk_indices, axis=1)
         # Compute beam index and token index
