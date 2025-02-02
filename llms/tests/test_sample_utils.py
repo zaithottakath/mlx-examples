@@ -84,8 +84,8 @@ class TestSampleUtils(unittest.TestCase):
         # next_token_logits shape: (2, 5)
         # Row 0 has a clear maximum at index 0; row 1 is uniform.
         next_token_logits = mx.array([
-            [10, 1, 1, 1, 1],
-            [1, 1, 1, 1, 1]
+            [10.0, 1.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0, 1.0, 1.0]
         ])
         # Use zero sequence weights.
         sequence_weights = mx.zeros((2,), dtype=mx.float32)
@@ -120,10 +120,10 @@ class TestSampleUtils(unittest.TestCase):
         #   beam0: [1, 1, 1, 1] (all equal, returns index 0)
         #   beam1: [0, 0, 10, 0] (clear max at index 2)
         next_token_logits = mx.array([
-            [5, 1, 1, 1],
-            [2, 6, 2, 2],
-            [1, 1, 1, 1],
-            [0, 0, 10, 0]
+            [5.0, 1.0, 1.0, 1.0],
+            [2.0, 6.0, 2.0, 2.0],
+            [1.0, 1.0, 1.0, 1.0],
+            [0.0, 0.0, 10.0, 0.0]
         ])
         # Use zero sequence weights.
         sequence_weights = mx.zeros((4,), dtype=mx.float32)
@@ -142,8 +142,8 @@ class TestSampleUtils(unittest.TestCase):
         temperature = 1.0
         # Simple test with 1 batch, 2 beams, vocab_size = 3.
         next_token_logits = mx.array([
-            [10, 1, 1],
-            [1, 10, 1]
+            [10.0, 1.0, 1.0],
+            [1.0, 10.0, 1.0]
         ])
         # First, use zero sequence weights.
         sequence_weights_zero = mx.array([0, 0], dtype=mx.float32)
