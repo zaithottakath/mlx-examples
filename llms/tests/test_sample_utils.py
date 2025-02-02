@@ -102,12 +102,6 @@ class TestSampleUtils(unittest.TestCase):
         expected_next_token_ids = mx.array([[0], [0]])
         expected_beam_indices = mx.array([0, 1])
         
-        print("next_token_ids:", next_token_ids)
-        print("expected_next_token_ids:", expected_next_token_ids)
-        print("beam_indices:", beam_indices)
-        print("expected_beam_indices:", expected_beam_indices)
-        print("next_token_ids shape:", next_token_ids.shape)
-        print("beam_indices shape:", beam_indices.shape)
         
         self.assertTrue(mx.array_equal(next_token_ids, expected_next_token_ids))
         self.assertTrue(mx.array_equal(beam_indices, expected_beam_indices))
