@@ -301,5 +301,17 @@ class TestPromptCache(unittest.TestCase):
             self.assertTrue(mx.allclose(logits, all_logits[i], rtol=2e-2))
 
 
+    def test_make_prompt_cache_multi_beam(self):
+        beams = 2
+        # Create a dummy model with a layers attribute for caching.
+        class DummyModel:
+            layers = [object(), object(), object()]
+        caches = make_prompt_cache(DummyModel(), beams=beams)
+        for c in caches:
+            # Only test caches that implement update_and_fetch and have a keys attribute.
+            if hasattr(c, "update_and_fetch"):
+                x = mx.random.uniform(shape=(1, 8, 10, 4))
+                c.update_and_fetch(x, x)
+                self.assertEqual(c.keys.shape[0], beams)
 if __name__ == "__main__":
     unittest.main()
