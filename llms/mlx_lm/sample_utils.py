@@ -13,8 +13,8 @@ def beam_search_impl(flat_scores: mx.array, vocab_size: int, batch: int, beams: 
     # Create a bias vector for tie-breaking.
     bias = mx.arange(total_dim, dtype=flat_scores.dtype)
     bias = mx.reshape(bias, (1, total_dim))
-    # Add a small bias to the scores.
-    flat_scores = flat_scores + bias * 1e-6
+    # Subtract a small bias to favor lower indices in tie-breaking.
+    flat_scores = flat_scores - bias * 1e-6
     # Get indices that sort the flat_scores in descending order.
     sorted_idx = mx.topk(flat_scores, k=total_dim, axis=1).astype(mx.int32)
     # Retrieve sorted scores.
