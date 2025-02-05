@@ -317,15 +317,14 @@ class BeamSearchSampler:
         # Compute log probabilities in a stable manner.
         logprobs = scaled_logits - m - mx.log(mx.sum(mx.exp(scaled_logits - m), axis=-1, keepdims=True))
         # Check for NaN values in logprobs and log a warning if detected.
-        if mx.sum(mx.isnan(logprobs)).item() > 0:
-            print("BeamSearchSampler: Detected NaN values in logprobs. scaled_logits: {}, m: {}".format(scaled_logits, m))
+        # if mx.sum(mx.isnan(logprobs)).item() > 0:
+        #     print("BeamSearchSampler: Detected NaN values in logprobs. scaled_logits: {}, m: {}".format(scaled_logits, m))
         # Incorporate previous cumulative sequence weights into the current log probabilities.
         combined_scores = mx.reshape(sequence_weights, (-1, 1)) + logprobs  # shape: (batch*beams, vocab_size)
         # Determine the batch size based on the number of beams.
         batch = sequence_weights.shape[0] // self.beams
         # Adjust sequence_weights and logprobs if their shape doesn't match the expected batch*beams.
         if sequence_weights.shape[0] != batch * self.beams:
-            print("DEBUG: Adjusting sequence_weights shape from", sequence_weights.shape, "to", (batch * self.beams,))
             sequence_weights = sequence_weights[:batch * self.beams]
             logprobs = logprobs[:batch * self.beams]
         vocab_size = next_token_logits.shape[-1]
