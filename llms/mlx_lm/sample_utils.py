@@ -292,7 +292,7 @@ class BeamSearchSampler:
         sorted_beam_ids = sorted_idx // vocab_size  # shape (batch, total_dim)
         sorted_token_ids = sorted_idx % vocab_size   # shape (batch, total_dim)
         positions = mx.arange(total_dim, dtype=mx.int32).reshape((1, total_dim))
-        positions = positions.broadcast_to((batch, total_dim))  # shape (batch, total_dim)
+        positions = mx.broadcast_to(positions, (batch, total_dim))  # shape (batch, total_dim)
         beam_range = mx.arange(self.beams, dtype=mx.int32).reshape((1, 1, self.beams))  # shape (1,1,self.beams)
         sorted_beam_ids_exp = mx.expand_dims(sorted_beam_ids, axis=-1)  # shape (batch, total_dim, 1)
         mask = mx.equal(sorted_beam_ids_exp, beam_range)  # shape (batch, total_dim, self.beams)
