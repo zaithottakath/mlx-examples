@@ -254,7 +254,6 @@ class BeamSearchSampler:
     def __init__(self, beams: int = 3, temperature: float = 1.0):
         self.beams = beams
         if temperature <= 0.0:
-            print("BeamSearchSampler received temperature <= 0; setting temperature=1.0 for numerical stability.")
             self.temperature = 1.0
         else:
             self.temperature = temperature
@@ -262,7 +261,6 @@ class BeamSearchSampler:
     def __call__(self, next_token_logits: mx.array, sequence_weights: mx.array, _):
         # next_token_logits: shape (batch * beams, vocab_size)
         if next_token_logits.shape[0] != sequence_weights.shape[0]:
-            print("DEBUG: Adjusting next_token_logits shape from", next_token_logits.shape, "to", (sequence_weights.shape[0], next_token_logits.shape[-1]))
             next_token_logits = next_token_logits[:sequence_weights.shape[0]]
         # Compute numerically stable log probabilities without using mx.log_softmax.
         scaled_logits = next_token_logits / self.temperature
@@ -294,7 +292,6 @@ class BeamSearchSampler:
         for b in range(batch):
             sorted_indices = mx.topk(flat_scores[b], k=flat_scores[b].shape[0], axis=0).astype(mx.int32).tolist()
             log_indices = sorted_indices if len(sorted_indices) <= 10 else sorted_indices[:10] + ["..."]
-            print(f"DEBUG: Batch {b} flat_scores shape: {flat_scores[b].shape}, sorted_indices: {log_indices}")
             selected = {}
             for i in sorted_indices:
                 i = int(i)
@@ -309,7 +306,6 @@ class BeamSearchSampler:
                     selected[beam_id] = (token, score, i)
                 if len(selected) == self.beams:
                     break
-            print("DEBUG: Batch", b, "selected before fill:", selected)
             # If not all beams are represented, fill missing beam_ids with a default candidate from that beam.
             for beam_id in range(self.beams):
                 if beam_id not in selected:
@@ -318,7 +314,6 @@ class BeamSearchSampler:
                     candidate_index = beam_id * vocab_size + token_candidate
                     score_candidate = float(beam_row[token_candidate].item())
                     selected[beam_id] = (token_candidate, score_candidate, candidate_index)
-            print("DEBUG: Batch", b, "selected after fill:", selected)
             for beam_id in sorted(selected.keys()):
                 token, score, i = selected[beam_id]
                 next_token_ids_list.append(token)
