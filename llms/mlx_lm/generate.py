@@ -84,6 +84,12 @@ def setup_arg_parser():
     )
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED, help="PRNG seed")
     parser.add_argument(
+        "--num-beams",
+        type=int,
+        default=1,
+        help="Number of beams for beam search. Beam search is used if this value is > 1."
+    )
+    parser.add_argument(
         "--ignore-chat-template",
         action="store_true",
         help="Use the raw prompt without the tokenizer's chat template.",
@@ -233,7 +239,7 @@ def main():
             raise ValueError("Draft model tokenizer does not match model tokenizer.")
     else:
         draft_model = None
-    sampler = make_sampler(args.temp, args.top_p, args.min_p, args.min_tokens_to_keep)
+    sampler = make_sampler(args.temp, args.top_p, args.min_p, args.min_tokens_to_keep, beam=args.num_beams)
     response = generate(
         model,
         tokenizer,
