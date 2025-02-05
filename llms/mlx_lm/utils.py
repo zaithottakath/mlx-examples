@@ -294,8 +294,8 @@ def generate_step(
 
             quantize_cache_fn(prompt_cache)
 
+            y = sampler(logits)
             logprobs = logits - mx.logsumexp(logits, keepdims=True)
-            y = sampler(logprobs)
             return y, logprobs.squeeze(0)
 
     def _step_beam(y, beam_sequence_weights):
@@ -308,8 +308,7 @@ def generate_step(
                   for processor in logits_processors:
                       logits = processor(y, logits)
               quantize_cache_fn(prompt_cache)
-              logprobs = logits - mx.logsumexp(logits, keepdims=True)
-              next_token_ids, beam_indices, beam_scores = sampler(logprobs, beam_sequence_weights, None)
+              next_token_ids, beam_indices, beam_scores = sampler(logits, beam_sequence_weights, None)
               new_beams = []
               for i in range(sampler.beams):
                   selected_beam = y[beam_indices[i]]
