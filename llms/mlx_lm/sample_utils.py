@@ -285,41 +285,27 @@ class BeamSearchSampler:
         bias = -mx.arange(total_dim, dtype=flat_scores.dtype)
         bias = mx.reshape(bias, (1, total_dim))
         flat_scores = flat_scores + bias * 1e-6
-        # Perform global candidate selection with diversity constraint:
-        next_token_ids_list = []
-        beam_indices_list = []
-        beam_scores_list = []
-        for b in range(batch):
-            sorted_indices = mx.topk(flat_scores[b], k=flat_scores[b].shape[0], axis=0).astype(mx.int32).tolist()
-            log_indices = sorted_indices if len(sorted_indices) <= 10 else sorted_indices[:10] + ["..."]
-            selected = {}
-            for i in sorted_indices:
-                i = int(i)
-                if i < 0:
-                    continue
-                beam_id = i // vocab_size
-                if not (0 <= beam_id < self.beams):
-                    continue
-                score = float(flat_scores[b][i].item())
-                token = i % vocab_size
-                if beam_id not in selected:
-                    selected[beam_id] = (token, score, i)
-                if len(selected) == self.beams:
-                    break
-            # If not all beams are represented, fill missing beam_ids with a default candidate from that beam.
-            for beam_id in range(self.beams):
-                if beam_id not in selected:
-                    beam_row = combined_scores[b, beam_id, :]
-                    token_candidate = int(mx.argmax(beam_row, axis=-1).item())
-                    candidate_index = beam_id * vocab_size + token_candidate
-                    score_candidate = float(beam_row[token_candidate].item())
-                    selected[beam_id] = (token_candidate, score_candidate, candidate_index)
-            for beam_id in sorted(selected.keys()):
-                token, score, i = selected[beam_id]
-                next_token_ids_list.append(token)
-                beam_indices_list.append(beam_id)
-                beam_scores_list.append(score)
-        next_token_ids = mx.array(next_token_ids_list, dtype=mx.int32).reshape(batch * self.beams, 1)
-        beam_indices = mx.array(beam_indices_list, dtype=mx.int32)
-        beam_scores = mx.array(beam_scores_list, dtype=flat_scores.dtype)
+        # Perform global candidate selection with diversity constraint using vectorized operations:
+        total_dim = self.beams * vocab_size
+        sorted_idx = mx.topk(flat_scores, k=total_dim, axis=1).astype(mx.int32)  # shape (batch, total_dim)
+        sorted_scores = mx.take_along_axis(flat_scores, sorted_idx, axis=1)  # shape (batch, total_dim)
+        sorted_beam_ids = sorted_idx // vocab_size  # shape (batch, total_dim)
+        sorted_token_ids = sorted_idx % vocab_size   # shape (batch, total_dim)
+        positions = mx.arange(total_dim, dtype=mx.int32).reshape((1, total_dim))
+        positions = positions.broadcast_to((batch, total_dim))  # shape (batch, total_dim)
+        beam_range = mx.arange(self.beams, dtype=mx.int32).reshape((1, 1, self.beams))  # shape (1,1,self.beams)
+        sorted_beam_ids_exp = mx.expand_dims(sorted_beam_ids, axis=-1)  # shape (batch, total_dim, 1)
+        mask = mx.equal(sorted_beam_ids_exp, beam_range)  # shape (batch, total_dim, self.beams)
+        positions_extended = mx.expand_dims(positions, axis=-1)  # shape (batch, total_dim, 1)
+        positions_masked = mx.where(mask, positions_extended, mx.full_like(positions_extended, total_dim))
+        first_occurrence = mx.min(positions_masked, axis=1)  # shape (batch, self.beams)
+        batch_indices = mx.arange(batch, dtype=mx.int32).reshape((batch, 1))
+        batch_indices = batch_indices.broadcast_to((batch, self.beams))  # shape (batch, self.beams)
+        gather_indices = mx.stack([batch_indices, first_occurrence], axis=-1)  # shape (batch, self.beams, 2)
+        selected_token_ids = mx.gather_nd(sorted_token_ids, gather_indices)  # shape (batch, self.beams)
+        selected_beam_ids = mx.gather_nd(sorted_beam_ids, gather_indices)  # shape (batch, self.beams)
+        selected_scores = mx.gather_nd(sorted_scores, gather_indices)  # shape (batch, self.beams)
+        next_token_ids = mx.reshape(selected_token_ids, (batch * self.beams, 1))
+        beam_indices = mx.reshape(selected_beam_ids, (batch * self.beams,))
+        beam_scores = mx.reshape(selected_scores, (batch * self.beams,))
         return next_token_ids, beam_indices, beam_scores
