@@ -561,13 +561,15 @@ def stream_generate(
     with wired_limit(model, [generation_stream]):
         detokenizer.reset()
         tic = time.perf_counter()
+        sampler_arg = kwargs.get("sampler", None)
+        using_beam = sampler_arg is not None and hasattr(sampler_arg, "beams") and sampler_arg.beams > 1
         for n, (token, logprobs) in enumerate(token_generator):
             if n == 0:
                 prompt_time = time.perf_counter() - tic
                 prompt_tps = prompt.size / prompt_time
                 tic = time.perf_counter()
             token_int = token if isinstance(token, int) else int(token.item())
-            if token_int in tokenizer.eos_token_ids:
+            if not using_beam and token_int in tokenizer.eos_token_ids:
                 break
 
             detokenizer.add_token(token_int)
