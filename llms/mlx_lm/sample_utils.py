@@ -259,7 +259,7 @@ class BeamSearchSampler:
             self.temperature = temperature
 
     @mx.compile
-    def _beam_search(self, flat_scores: mx.array, vocab_size: int, batch: int, beams: int, total_dim: int):
+    def _beam_search(self, flat_scores: mx.array, vocab_size: int, batch: int, beams: int, total_dim: int, dummy_total_dim: int):
         bias = -mx.arange(total_dim, dtype=flat_scores.dtype)
         bias = mx.reshape(bias, (1, total_dim))
         flat_scores = flat_scores + bias * 1e-6
@@ -318,4 +318,4 @@ class BeamSearchSampler:
         flat_scores = mx.reshape(combined_scores, (batch, self.beams * vocab_size))
         total_dim = self.beams * vocab_size
         self._combined_scores = combined_scores
-        return self._beam_search(flat_scores, vocab_size, batch, self.beams, total_dim)
+        return self._beam_search(flat_scores, vocab_size, batch, self.beams, total_dim, total_dim)
