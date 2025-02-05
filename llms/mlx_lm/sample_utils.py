@@ -275,11 +275,10 @@ class BeamSearchSampler:
         beam_indices_list = []
         beam_scores_list = []
         for b in range(batch):
-            scores = flat_scores[b].tolist()  # convert to Python list
-            candidates = [(i, scores[i]) for i in range(total_dim)]
-            candidates.sort(key=lambda x: x[1], reverse=True)
+            sorted_indices = mx.topk(flat_scores[b], k=flat_scores[b].shape[0], axis=0).tolist()
             selected = {}
-            for i, score in candidates:
+            for i in sorted_indices:
+                score = float(flat_scores[b][i].item())
                 beam_id = i // vocab_size
                 token = i % vocab_size
                 if beam_id not in selected:
