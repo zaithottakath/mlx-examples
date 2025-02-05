@@ -288,8 +288,12 @@ class BeamSearchSampler:
             selected = {}
             for i in sorted_indices:
                 i = int(i)
-                score = float(flat_scores[b][i].item())
+                if i < 0:
+                    continue
                 beam_id = i // vocab_size
+                if not (0 <= beam_id < self.beams):
+                    continue
+                score = float(flat_scores[b][i].item())
                 token = i % vocab_size
                 if beam_id not in selected:
                     selected[beam_id] = (token, score, i)
