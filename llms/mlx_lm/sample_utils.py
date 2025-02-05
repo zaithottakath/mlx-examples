@@ -23,7 +23,7 @@ def beam_search_impl(flat_scores: mx.array, vocab_size: int, batch: int, beams: 
     sorted_beam_ids_exp = mx.expand_dims(sorted_beam_ids, axis=-1)
     mask = mx.equal(sorted_beam_ids_exp, beam_range)
     positions_extended = mx.expand_dims(positions, axis=-1)
-    positions_masked = mx.where(mask, positions_extended, mx.full(positions_extended.shape, total_dim, dtype=positions_extended.dtype))
+    positions_masked = mx.where(mask, positions_extended, mx.full((batch, total_dim, 1), total_dim, dtype=positions_extended.dtype))
     first_occurrence = mx.min(positions_masked, axis=1)
     fallback_mask = (first_occurrence == total_dim)
     default_tokens = mx.argmax(combined_scores, axis=-1)
