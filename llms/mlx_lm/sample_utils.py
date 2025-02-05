@@ -256,6 +256,10 @@ class BeamSearchSampler:
 
     def __call__(self, next_token_logits: mx.array, sequence_weights: mx.array, _):
         # next_token_logits: shape (batch * beams, vocab_size)
+        if next_token_logits.shape[0] != sequence_weights.shape[0]:
+            if os.environ.get("MX_DEBUG_BEAM", "false").lower() in ("true", "1"):
+                print("DEBUG: Adjusting next_token_logits shape from", next_token_logits.shape, "to", (sequence_weights.shape[0], next_token_logits.shape[-1]))
+            next_token_logits = next_token_logits[:sequence_weights.shape[0]]
         # Compute log probabilities with temperature scaling.
         logprobs = mx.log(mx.softmax(next_token_logits / self.temperature, axis=-1))
         # Add previous cumulative sequence weights.
