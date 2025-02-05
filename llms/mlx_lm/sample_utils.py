@@ -257,8 +257,7 @@ class BeamSearchSampler:
     def __call__(self, next_token_logits: mx.array, sequence_weights: mx.array, _):
         # next_token_logits: shape (batch * beams, vocab_size)
         if next_token_logits.shape[0] != sequence_weights.shape[0]:
-            if os.environ.get("MX_DEBUG_BEAM", "false").lower() in ("true", "1"):
-                print("DEBUG: Adjusting next_token_logits shape from", next_token_logits.shape, "to", (sequence_weights.shape[0], next_token_logits.shape[-1]))
+            print("DEBUG: Adjusting next_token_logits shape from", next_token_logits.shape, "to", (sequence_weights.shape[0], next_token_logits.shape[-1]))
             next_token_logits = next_token_logits[:sequence_weights.shape[0]]
         # Compute log probabilities with temperature scaling.
         logprobs = mx.log(mx.softmax(next_token_logits / self.temperature, axis=-1))
@@ -266,8 +265,7 @@ class BeamSearchSampler:
         combined_scores = mx.reshape(sequence_weights, (-1, 1)) + logprobs  # shape: (batch*beams, vocab_size)
         batch = sequence_weights.shape[0] // self.beams
         if sequence_weights.shape[0] != batch * self.beams:
-            if os.environ.get("MX_DEBUG_BEAM", "false").lower() in ("true", "1"):
-                print("DEBUG: Adjusting sequence_weights shape from", sequence_weights.shape, "to", (batch * self.beams,))
+            print("DEBUG: Adjusting sequence_weights shape from", sequence_weights.shape, "to", (batch * self.beams,))
             sequence_weights = sequence_weights[:batch * self.beams]
             logprobs = logprobs[:batch * self.beams]
         vocab_size = next_token_logits.shape[-1]
@@ -286,8 +284,7 @@ class BeamSearchSampler:
         beam_scores_list = []
         for b in range(batch):
             sorted_indices = mx.topk(flat_scores[b], k=flat_scores[b].shape[0], axis=0).astype(mx.int32).tolist()
-            if os.environ.get("MX_DEBUG_BEAM", "false").lower() in ("true", "1"):
-                print("DEBUG: Batch", b, "flat_scores shape:", flat_scores[b].shape, "sorted_indices:", sorted_indices)
+            print("DEBUG: Batch", b, "flat_scores shape:", flat_scores[b].shape, "sorted_indices:", sorted_indices)
             selected = {}
             for i in sorted_indices:
                 i = int(i)
@@ -298,8 +295,7 @@ class BeamSearchSampler:
                     selected[beam_id] = (token, score, i)
                 if len(selected) == self.beams:
                     break
-            if os.environ.get("MX_DEBUG_BEAM", "false").lower() in ("true", "1"):
-                print("DEBUG: Batch", b, "selected before fill:", selected)
+            print("DEBUG: Batch", b, "selected before fill:", selected)
             # If not all beams are represented, fill missing beam_ids with a default candidate from that beam.
             for beam_id in range(self.beams):
                 if beam_id not in selected:
@@ -308,8 +304,7 @@ class BeamSearchSampler:
                     candidate_index = beam_id * vocab_size + token_candidate
                     score_candidate = float(beam_row[token_candidate].item())
                     selected[beam_id] = (token_candidate, score_candidate, candidate_index)
-            if os.environ.get("MX_DEBUG_BEAM", "false").lower() in ("true", "1"):
-                print("DEBUG: Batch", b, "selected after fill:", selected)
+            print("DEBUG: Batch", b, "selected after fill:", selected)
             for beam_id in sorted(selected.keys()):
                 token, score, i = selected[beam_id]
                 next_token_ids_list.append(token)
