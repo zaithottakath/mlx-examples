@@ -51,6 +51,13 @@ class TestGenerate(unittest.TestCase):
         )
         self.assertEqual(len(all_toks), len(init_toks) + 5)
 
+    def test_generate_beam_search(self):
+        from mlx_lm.sample_utils import make_sampler
+        beam_sampler = make_sampler(beam=2, temp=1.0)
+        text = generate(
+            self.model, self.tokenizer, "hello", max_tokens=5, verbose=False, sampler=beam_sampler
+        )
+        self.assertTrue(len(text) > 0)
 
 if __name__ == "__main__":
     unittest.main()
