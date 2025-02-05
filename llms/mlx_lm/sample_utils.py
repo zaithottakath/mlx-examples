@@ -8,6 +8,40 @@ import mlx.core as mx
 import os
 import logging
 
+@partial(mx.compile, shapeless=True)
+def beam_search_impl(flat_scores: mx.array, vocab_size: int, batch: int, beams: int, total_dim: int, combined_scores: mx.array):
+    bias = -mx.arange(total_dim, dtype=flat_scores.dtype)
+    bias = mx.reshape(bias, (1, total_dim))
+    flat_scores = flat_scores + bias * 1e-6
+    sorted_idx = mx.topk(flat_scores, k=total_dim, axis=1).astype(mx.int32)
+    sorted_scores = mx.take_along_axis(flat_scores, sorted_idx, axis=1)
+    sorted_beam_ids = sorted_idx // vocab_size
+    sorted_token_ids = sorted_idx % vocab_size
+    positions = mx.arange(total_dim, dtype=mx.int32).reshape((1, total_dim))
+    positions = mx.broadcast_to(positions, (batch, total_dim))
+    beam_range = mx.arange(beams, dtype=mx.int32).reshape((1, 1, beams))
+    sorted_beam_ids_exp = mx.expand_dims(sorted_beam_ids, axis=-1)
+    mask = mx.equal(sorted_beam_ids_exp, beam_range)
+    positions_extended = mx.expand_dims(positions, axis=-1)
+    positions_masked = mx.where(mask, positions_extended, mx.full(positions_extended.shape, total_dim, dtype=positions_extended.dtype))
+    first_occurrence = mx.min(positions_masked, axis=1)
+    fallback_mask = (first_occurrence == total_dim)
+    if mx.sum(fallback_mask).item() > 0:
+        default_tokens = mx.argmax(combined_scores, axis=-1)
+        default_scores = mx.take_along_axis(combined_scores, default_tokens[..., None], axis=-1).squeeze(-1)
+        beam_ids_vector = mx.broadcast_to(mx.arange(beams, dtype=mx.int32).reshape((1, beams)), (batch, beams))
+        selected_token_ids = mx.where(fallback_mask, default_tokens, mx.take_along_axis(sorted_token_ids, first_occurrence, axis=1))
+        selected_beam_ids = mx.where(fallback_mask, beam_ids_vector, mx.take_along_axis(sorted_beam_ids, first_occurrence, axis=1))
+        selected_scores = mx.where(fallback_mask, default_scores, mx.take_along_axis(sorted_scores, first_occurrence, axis=1))
+    else:
+        selected_token_ids = mx.take_along_axis(sorted_token_ids, first_occurrence, axis=1)
+        selected_beam_ids = mx.take_along_axis(sorted_beam_ids, first_occurrence, axis=1)
+        selected_scores = mx.take_along_axis(sorted_scores, first_occurrence, axis=1)
+    next_token_ids = mx.reshape(selected_token_ids, (batch * beams, 1))
+    beam_indices = mx.reshape(selected_beam_ids, (batch * beams,))
+    beam_scores = mx.reshape(selected_scores, (batch * beams,))
+    return next_token_ids, beam_indices, beam_scores
+
 
 def make_sampler(
     temp: float = 0.0,
@@ -258,41 +292,6 @@ class BeamSearchSampler:
         else:
             self.temperature = temperature
 
-    @partial(mx.compile, shapeless=True)
-    def _beam_search(self, flat_scores: mx.array, vocab_size: int, batch: int, beams: int, total_dim: int):
-        bias = -mx.arange(total_dim, dtype=flat_scores.dtype)
-        bias = mx.reshape(bias, (1, total_dim))
-        flat_scores = flat_scores + bias * 1e-6
-
-        sorted_idx = mx.topk(flat_scores, k=total_dim, axis=1).astype(mx.int32)
-        sorted_scores = mx.take_along_axis(flat_scores, sorted_idx, axis=1)
-        sorted_beam_ids = sorted_idx // vocab_size
-        sorted_token_ids = sorted_idx % vocab_size
-
-        positions = mx.arange(total_dim, dtype=mx.int32).reshape((1, total_dim))
-        positions = mx.broadcast_to(positions, (batch, total_dim))
-        beam_range = mx.arange(beams, dtype=mx.int32).reshape((1, 1, beams))
-        sorted_beam_ids_exp = mx.expand_dims(sorted_beam_ids, axis=-1)
-        mask = mx.equal(sorted_beam_ids_exp, beam_range)
-        positions_extended = mx.expand_dims(positions, axis=-1)
-        positions_masked = mx.where(mask, positions_extended, mx.full(positions_extended.shape, total_dim, dtype=positions_extended.dtype))
-        first_occurrence = mx.min(positions_masked, axis=1)
-        fallback_mask = (first_occurrence == total_dim)
-        if mx.sum(fallback_mask).item() > 0:
-            default_tokens = mx.argmax(self._combined_scores, axis=-1)
-            default_scores = mx.take_along_axis(self._combined_scores, default_tokens[..., None], axis=-1).squeeze(-1)
-            beam_ids_vector = mx.broadcast_to(mx.arange(beams, dtype=mx.int32).reshape((1, beams)), (batch, beams))
-            selected_token_ids = mx.where(fallback_mask, default_tokens, mx.take_along_axis(sorted_token_ids, first_occurrence, axis=1))
-            selected_beam_ids = mx.where(fallback_mask, beam_ids_vector, mx.take_along_axis(sorted_beam_ids, first_occurrence, axis=1))
-            selected_scores = mx.where(fallback_mask, default_scores, mx.take_along_axis(sorted_scores, first_occurrence, axis=1))
-        else:
-            selected_token_ids = mx.take_along_axis(sorted_token_ids, first_occurrence, axis=1)
-            selected_beam_ids = mx.take_along_axis(sorted_beam_ids, first_occurrence, axis=1)
-            selected_scores = mx.take_along_axis(sorted_scores, first_occurrence, axis=1)
-        next_token_ids = mx.reshape(selected_token_ids, (batch * beams, 1))
-        beam_indices = mx.reshape(selected_beam_ids, (batch * beams,))
-        beam_scores = mx.reshape(selected_scores, (batch * beams,))
-        return next_token_ids, beam_indices, beam_scores
 
     def __call__(self, next_token_logits: mx.array, sequence_weights: mx.array, _):
         # next_token_logits: shape (batch * beams, vocab_size)
@@ -318,4 +317,4 @@ class BeamSearchSampler:
         flat_scores = mx.reshape(combined_scores, (batch, self.beams * vocab_size))
         total_dim = self.beams * vocab_size
         self._combined_scores = combined_scores
-        return self._beam_search(flat_scores, vocab_size, batch, self.beams, total_dim)
+        return beam_search_impl(flat_scores, vocab_size, batch, self.beams, total_dim, combined_scores)
