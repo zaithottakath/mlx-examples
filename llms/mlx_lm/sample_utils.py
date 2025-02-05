@@ -253,7 +253,12 @@ class BeamSearchSampler:
     """
     def __init__(self, beams: int = 3, temperature: float = 1.0):
         self.beams = beams
-        self.temperature = temperature
+        if temperature <= 0.0:
+            import logging
+            logging.warning("BeamSearchSampler received temperature <= 0; setting temperature=1.0 for numerical stability.")
+            self.temperature = 1.0
+        else:
+            self.temperature = temperature
 
     def __call__(self, next_token_logits: mx.array, sequence_weights: mx.array, _):
         # next_token_logits: shape (batch * beams, vocab_size)
@@ -264,6 +269,9 @@ class BeamSearchSampler:
         scaled_logits = next_token_logits / self.temperature
         m = mx.max(scaled_logits, axis=-1, keepdims=True)
         logprobs = scaled_logits - m - mx.log(mx.sum(mx.exp(scaled_logits - m), axis=-1, keepdims=True))
+        if mx.sum(mx.isnan(logprobs)).item() > 0:
+            import logging
+            logging.error("BeamSearchSampler: Detected NaN values in logprobs. scaled_logits: {}, m: {}".format(scaled_logits, m))
         # Add previous cumulative sequence weights.
         combined_scores = mx.reshape(sequence_weights, (-1, 1)) + logprobs  # shape: (batch*beams, vocab_size)
         batch = sequence_weights.shape[0] // self.beams
