@@ -261,6 +261,11 @@ class BeamSearchSampler:
         # Add previous cumulative sequence weights.
         combined_scores = mx.reshape(sequence_weights, (-1, 1)) + logprobs  # shape: (batch*beams, vocab_size)
         batch = sequence_weights.shape[0] // self.beams
+        if sequence_weights.shape[0] != batch * self.beams:
+            if os.environ.get("MX_DEBUG_BEAM", "false").lower() in ("true", "1"):
+                print("DEBUG: Adjusting sequence_weights shape from", sequence_weights.shape, "to", (batch * self.beams,))
+            sequence_weights = sequence_weights[:batch * self.beams]
+            logprobs = logprobs[:batch * self.beams]
         vocab_size = next_token_logits.shape[-1]
         # Reshape combined scores to (batch, beams, vocab_size)
         combined_scores = mx.reshape(combined_scores, (batch, self.beams, vocab_size))
