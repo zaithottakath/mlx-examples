@@ -258,7 +258,7 @@ class BeamSearchSampler:
         else:
             self.temperature = temperature
 
-    @mx.compile
+    @mx.compile(shapeless=True)
     def _beam_search(self, flat_scores: mx.array, vocab_size: int, batch: int, beams: int, total_dim: int):
         bias = -mx.arange(total_dim, dtype=flat_scores.dtype)
         bias = mx.reshape(bias, (1, total_dim))
