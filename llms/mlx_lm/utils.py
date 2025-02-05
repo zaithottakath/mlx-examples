@@ -565,14 +565,15 @@ def stream_generate(
                 prompt_time = time.perf_counter() - tic
                 prompt_tps = prompt.size / prompt_time
                 tic = time.perf_counter()
-            if token in tokenizer.eos_token_ids:
+            token_int = token if isinstance(token, int) else int(token.item())
+            if token_int in tokenizer.eos_token_ids:
                 break
 
-            detokenizer.add_token(token)
+            detokenizer.add_token(token_int)
 
             yield GenerationResponse(
                 text=detokenizer.last_segment,
-                token=token,
+                token=token_int,
                 logprobs=logprobs,
                 prompt_tokens=prompt.size,
                 prompt_tps=prompt_tps,
