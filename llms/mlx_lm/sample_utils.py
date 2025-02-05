@@ -259,7 +259,7 @@ class BeamSearchSampler:
             self.temperature = temperature
 
     @mx.compile
-    def _beam_search(self, flat_scores: mx.array, vocab_size: int, batch: int, beams: int, total_dim: int, combined_scores: mx.array):
+    def _beam_search(self, flat_scores: mx.array, vocab_size: int, batch: int, beams: int, total_dim: int):
         bias = -mx.arange(total_dim, dtype=flat_scores.dtype)
         bias = mx.reshape(bias, (1, total_dim))
         flat_scores = flat_scores + bias * 1e-6
@@ -279,8 +279,8 @@ class BeamSearchSampler:
         first_occurrence = mx.min(positions_masked, axis=1)
         fallback_mask = (first_occurrence == total_dim)
         if mx.sum(fallback_mask).item() > 0:
-            default_tokens = mx.argmax(combined_scores, axis=-1)
-            default_scores = mx.take_along_axis(combined_scores, default_tokens[..., None], axis=-1).squeeze(-1)
+            default_tokens = mx.argmax(self._combined_scores, axis=-1)
+            default_scores = mx.take_along_axis(self._combined_scores, default_tokens[..., None], axis=-1).squeeze(-1)
             beam_ids_vector = mx.broadcast_to(mx.arange(beams, dtype=mx.int32).reshape((1, beams)), (batch, beams))
             selected_token_ids = mx.where(fallback_mask, default_tokens, mx.take_along_axis(sorted_token_ids, first_occurrence, axis=1))
             selected_beam_ids = mx.where(fallback_mask, beam_ids_vector, mx.take_along_axis(sorted_beam_ids, first_occurrence, axis=1))
@@ -317,4 +317,5 @@ class BeamSearchSampler:
         # Flatten scores to (batch, beams*vocab_size)
         flat_scores = mx.reshape(combined_scores, (batch, self.beams * vocab_size))
         total_dim = self.beams * vocab_size
-        return self._beam_search(flat_scores, vocab_size, batch, self.beams, total_dim, combined_scores)
+        self._combined_scores = combined_scores
+        return self._beam_search(flat_scores, vocab_size, batch, self.beams, total_dim)
