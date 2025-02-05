@@ -260,9 +260,10 @@ class BeamSearchSampler:
         if next_token_logits.shape[0] != sequence_weights.shape[0]:
             print("DEBUG: Adjusting next_token_logits shape from", next_token_logits.shape, "to", (sequence_weights.shape[0], next_token_logits.shape[-1]))
             next_token_logits = next_token_logits[:sequence_weights.shape[0]]
-        # Compute numerically stable log probabilities using log_softmax.
+        # Compute numerically stable log probabilities without using mx.log_softmax.
         scaled_logits = next_token_logits / self.temperature
-        logprobs = mx.log_softmax(scaled_logits, axis=-1)
+        m = mx.max(scaled_logits, axis=-1, keepdims=True)
+        logprobs = scaled_logits - m - mx.log(mx.sum(mx.exp(scaled_logits - m), axis=-1, keepdims=True))
         # Add previous cumulative sequence weights.
         combined_scores = mx.reshape(sequence_weights, (-1, 1)) + logprobs  # shape: (batch*beams, vocab_size)
         batch = sequence_weights.shape[0] // self.beams
