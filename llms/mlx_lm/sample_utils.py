@@ -286,7 +286,7 @@ class BeamSearchSampler:
         for b in range(batch):
             sorted_indices = mx.topk(flat_scores[b], k=flat_scores[b].shape[0], axis=0).astype(mx.int32).tolist()
             log_indices = sorted_indices if len(sorted_indices) <= 10 else sorted_indices[:10] + ["..."]
-            logging.debug(f"Batch {b} flat_scores shape: {flat_scores[b].shape}, sorted_indices: {log_indices}")
+            print(f"DEBUG: Batch {b} flat_scores shape: {flat_scores[b].shape}, sorted_indices: {log_indices}")
             selected = {}
             for i in sorted_indices:
                 i = int(i)
@@ -301,7 +301,7 @@ class BeamSearchSampler:
                     selected[beam_id] = (token, score, i)
                 if len(selected) == self.beams:
                     break
-            logging.debug(f"Batch {b} selected before fill: {selected}")
+            print("DEBUG: Batch", b, "selected before fill:", selected)
             # If not all beams are represented, fill missing beam_ids with a default candidate from that beam.
             for beam_id in range(self.beams):
                 if beam_id not in selected:
@@ -310,7 +310,7 @@ class BeamSearchSampler:
                     candidate_index = beam_id * vocab_size + token_candidate
                     score_candidate = float(beam_row[token_candidate].item())
                     selected[beam_id] = (token_candidate, score_candidate, candidate_index)
-            logging.debug(f"Batch {b} selected after fill: {selected}")
+            print("DEBUG: Batch", b, "selected after fill:", selected)
             for beam_id in sorted(selected.keys()):
                 token, score, i = selected[beam_id]
                 next_token_ids_list.append(token)
