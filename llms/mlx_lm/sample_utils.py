@@ -265,8 +265,14 @@ class BeamSearchSampler:
         vocab_size = next_token_logits.shape[-1]
         # Reshape combined scores to form a candidate matrix of shape (batch, beams*vocab_size)
         combined_scores = mx.reshape(combined_scores, (batch, self.beams * vocab_size))
+        # Add tie-breaking bias to ensure deterministic selection in the case of equal scores.
+        total_dim = self.beams * vocab_size
+        bias = -mx.arange(total_dim, dtype=combined_scores.dtype)
+        bias = mx.reshape(bias, (1, total_dim))
+        combined_scores = combined_scores + bias * 1e-6
         # From the union of all candidate extensions for each batch, select the top 'beams' candidates globally.
-        topk_scores, topk_indices = mx.topk(combined_scores, k=self.beams, axis=1)
+        topk_indices = mx.topk(combined_scores, k=self.beams, axis=1)
+        topk_scores = mx.take_along_axis(combined_scores, topk_indices, axis=1)
         # For each selected candidate, compute:
         #   - the originating beam index: floor_divide(candidate_index, vocab_size)
         #   - the token index: candidate_index mod vocab_size.
