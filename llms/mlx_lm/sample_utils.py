@@ -278,6 +278,7 @@ class BeamSearchSampler:
             sorted_indices = mx.topk(flat_scores[b], k=flat_scores[b].shape[0], axis=0).tolist()
             selected = {}
             for i in sorted_indices:
+                i = int(i)
                 score = float(flat_scores[b][i].item())
                 beam_id = i // vocab_size
                 token = i % vocab_size
