@@ -275,7 +275,7 @@ class BeamSearchSampler:
         beam_indices_list = []
         beam_scores_list = []
         for b in range(batch):
-            sorted_indices = mx.topk(flat_scores[b], k=flat_scores[b].shape[0], axis=0).tolist()
+            sorted_indices = mx.topk(flat_scores[b], k=flat_scores[b].shape[0], axis=0).astype(mx.int32).tolist()
             selected = {}
             for i in sorted_indices:
                 i = int(i)
