@@ -272,6 +272,7 @@ class BeamSearchSampler:
         combined_scores = combined_scores + bias * 1e-6
         # From the union of all candidate extensions for each batch, select the top 'beams' candidates globally.
         topk_indices = mx.topk(combined_scores, k=self.beams, axis=1)
+        topk_indices = topk_indices.astype(mx.int32)
         topk_scores = mx.take_along_axis(combined_scores, topk_indices, axis=1)
         # For each selected candidate, compute:
         #   - the originating beam index: floor_divide(candidate_index, vocab_size)
