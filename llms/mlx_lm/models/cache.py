@@ -222,6 +222,8 @@ class KVCache(_BaseCache):
 
     def update_and_fetch(self, keys, values):
         prev = self.offset
+        if self.keys is None:
+            self.batch_size = keys.shape[0]
         if self.keys is None or (prev + keys.shape[2]) > self.keys.shape[2]:
             B = self.batch_size
             n_kv_heads = keys.shape[1]
