@@ -300,8 +300,9 @@ def generate_step(
 
     def _step_beam(y, beam_sequence_weights):
          with mx.stream(generation_stream):
-              logits = model(y, cache=prompt_cache)
-              logits = mx.eval(logits)
+              logits = mx.eval(model(y, cache=prompt_cache))
+              if logits is None:
+                  raise RuntimeError("Model evaluation returned None in beam search branch.")
               logits = logits[:, -1, :]
               if logits_processors:
                   for processor in logits_processors:
