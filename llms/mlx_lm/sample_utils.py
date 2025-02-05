@@ -10,31 +10,49 @@ import logging
 
 @mx.compile
 def beam_search_impl(flat_scores: mx.array, vocab_size: int, batch: int, beams: int, total_dim: int, combined_scores: mx.array):
+    # Create a bias vector for tie-breaking; negative values ensure stability in sorting.
     bias = -mx.arange(total_dim, dtype=flat_scores.dtype)
     bias = mx.reshape(bias, (1, total_dim))
+    # Add a small bias to the scores.
     flat_scores = flat_scores + bias * 1e-6
+    # Get indices that sort the flat_scores in descending order.
     sorted_idx = mx.topk(flat_scores, k=total_dim, axis=1).astype(mx.int32)
+    # Retrieve sorted scores.
     sorted_scores = mx.take_along_axis(flat_scores, sorted_idx, axis=1)
+    # Derive beam and token indices from the sorted indices.
     sorted_beam_ids = sorted_idx // vocab_size
     sorted_token_ids = sorted_idx % vocab_size
+    # Create a positions vector for each candidate.
     positions = mx.arange(total_dim, dtype=mx.int32).reshape((1, total_dim))
     positions = mx.broadcast_to(positions, (batch, total_dim))
+    # Prepare a beam range for comparison.
     beam_range = mx.arange(beams, dtype=mx.int32).reshape((1, 1, beams))
+    # Expand sorted beam IDs to compare with beam_range.
     sorted_beam_ids_exp = mx.expand_dims(sorted_beam_ids, axis=-1)
+    # Compute a mask indicating which positions belong to each beam.
     mask = mx.equal(sorted_beam_ids_exp, beam_range)
+    # Expand positions to match mask dimensions.
     positions_extended = mx.expand_dims(positions, axis=-1)
+    # For positions not matching the beam, assign a high value (total_dim) to ignore them.
     positions_masked = mx.where(mask, positions_extended, mx.full((batch, total_dim, 1), total_dim, dtype=positions_extended.dtype))
+    # For each beam, find the first occurrence (minimum position) where a candidate appears.
     first_occurrence = mx.min(positions_masked, axis=1)
+    # Identify beams that have no candidate selected (fallback condition).
     fallback_mask = (first_occurrence == total_dim)
+    # Determine default token selections using argmax on combined_scores.
     default_tokens = mx.argmax(combined_scores, axis=-1)
     default_scores = mx.take_along_axis(combined_scores, default_tokens[..., None], axis=-1).squeeze(-1)
+    # Create a vector of beam indices as fallback.
     beam_ids_vector = mx.broadcast_to(mx.arange(beams, dtype=mx.int32).reshape((1, beams)), (batch, beams))
+    # Select tokens, beam IDs, and scores based on whether fallback is needed.
     selected_token_ids = mx.where(fallback_mask, default_tokens, mx.take_along_axis(sorted_token_ids, first_occurrence, axis=1))
     selected_beam_ids = mx.where(fallback_mask, beam_ids_vector, mx.take_along_axis(sorted_beam_ids, first_occurrence, axis=1))
     selected_scores = mx.where(fallback_mask, default_scores, mx.take_along_axis(sorted_scores, first_occurrence, axis=1))
+    # Reshape selected tokens and beam IDs to final output dimensions.
     next_token_ids = mx.reshape(selected_token_ids, (batch * beams, 1))
     beam_indices = mx.reshape(selected_beam_ids, (batch * beams,))
     beam_scores = mx.reshape(selected_scores, (batch * beams,))
+    # Return the final selected tokens, corresponding beam indices, and scores.
     return next_token_ids, beam_indices, beam_scores
 
 
@@ -292,24 +310,31 @@ class BeamSearchSampler:
         # next_token_logits: shape (batch * beams, vocab_size)
         if next_token_logits.shape[0] != sequence_weights.shape[0]:
             next_token_logits = next_token_logits[:sequence_weights.shape[0]]
-        # Compute numerically stable log probabilities without using mx.log_softmax.
+        # Scale the logits by the temperature for controlled randomness.
         scaled_logits = next_token_logits / self.temperature
+        # Subtract the maximum logit for numerical stability.
         m = mx.max(scaled_logits, axis=-1, keepdims=True)
+        # Compute log probabilities in a stable manner.
         logprobs = scaled_logits - m - mx.log(mx.sum(mx.exp(scaled_logits - m), axis=-1, keepdims=True))
+        # Check for NaN values in logprobs and log a warning if detected.
         if mx.sum(mx.isnan(logprobs)).item() > 0:
             print("BeamSearchSampler: Detected NaN values in logprobs. scaled_logits: {}, m: {}".format(scaled_logits, m))
-        # Add previous cumulative sequence weights.
+        # Incorporate previous cumulative sequence weights into the current log probabilities.
         combined_scores = mx.reshape(sequence_weights, (-1, 1)) + logprobs  # shape: (batch*beams, vocab_size)
+        # Determine the batch size based on the number of beams.
         batch = sequence_weights.shape[0] // self.beams
+        # Adjust sequence_weights and logprobs if their shape doesn't match the expected batch*beams.
         if sequence_weights.shape[0] != batch * self.beams:
             print("DEBUG: Adjusting sequence_weights shape from", sequence_weights.shape, "to", (batch * self.beams,))
             sequence_weights = sequence_weights[:batch * self.beams]
             logprobs = logprobs[:batch * self.beams]
         vocab_size = next_token_logits.shape[-1]
-        # Reshape combined scores to (batch, beams, vocab_size)
+        # Reshape combined_scores to separate the batch and beam dimensions.
         combined_scores = mx.reshape(combined_scores, (batch, self.beams, vocab_size))
-        # Flatten scores to (batch, beams*vocab_size)
+        # Flatten the combined scores over the beams and vocabulary dimensions.
         flat_scores = mx.reshape(combined_scores, (batch, self.beams * vocab_size))
         total_dim = self.beams * vocab_size
+        # Store the combined scores internally for use in fallback logic.
         self._combined_scores = combined_scores
+        # Invoke the compiled beam search implementation to obtain the next tokens.
         return beam_search_impl(flat_scores, vocab_size, batch, self.beams, total_dim, combined_scores)
