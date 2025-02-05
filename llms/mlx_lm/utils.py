@@ -278,6 +278,7 @@ def generate_step(
         # For beam search, assume single-batch; tile prompt for beams and initialize beam sequence weights.
         y = mx.tile(mx.expand_dims(y, axis=0), (sampler.beams, 1))
         beam_sequence_weights = mx.zeros((sampler.beams,), dtype=mx.float32)
+        prompt_cache = cache.make_prompt_cache(model, max_kv_size=max_kv_size, beams=sampler.beams)
 
     def _step(y):
         with mx.stream(generation_stream):

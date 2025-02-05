@@ -10,6 +10,7 @@ from mlx.utils import tree_flatten, tree_map, tree_unflatten
 def make_prompt_cache(
     model: nn.Module,
     max_kv_size: Optional[int] = None,
+    beams: int = 1,
 ) -> List[Any]:
     """
     Construct the model's cache for use when cgeneration.
@@ -24,15 +25,15 @@ def make_prompt_cache(
             size of ``max_kv_size``
     """
     if hasattr(model, "make_cache"):
-        return model.make_cache()
+        return model.make_cache(batch_size=beams)
 
     num_layers = len(model.layers)
     if max_kv_size is not None:
         return [
-            RotatingKVCache(max_size=max_kv_size, keep=4) for _ in range(num_layers)
+            RotatingKVCache(max_size=max_kv_size, keep=4, batch_size=beams) for _ in range(num_layers)
         ]
     else:
-        return [KVCache() for _ in range(num_layers)]
+        return [KVCache(batch_size=beams) for _ in range(num_layers)]
 
 
 def save_prompt_cache(file_name: str, cache: List[Any], metadata: Dict[str, str] = {}):
@@ -212,7 +213,8 @@ class QuantizedKVCache(_BaseCache):
 
 
 class KVCache(_BaseCache):
-    def __init__(self):
+    def __init__(self, batch_size: int = 1):
+        self.batch_size = batch_size
         self.keys = None
         self.values = None
         self.offset = 0
@@ -221,7 +223,9 @@ class KVCache(_BaseCache):
     def update_and_fetch(self, keys, values):
         prev = self.offset
         if self.keys is None or (prev + keys.shape[2]) > self.keys.shape[2]:
-            B, n_kv_heads, _, k_head_dim = keys.shape
+            B = self.batch_size
+            n_kv_heads = keys.shape[1]
+            _, _, _, k_head_dim = keys.shape
             v_head_dim = values.shape[3]
             n_steps = (self.step + keys.shape[2] - 1) // self.step
             k_shape = (B, n_kv_heads, n_steps * self.step, k_head_dim)
