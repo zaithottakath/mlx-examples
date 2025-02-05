@@ -297,7 +297,7 @@ class BeamSearchSampler:
         sorted_beam_ids_exp = mx.expand_dims(sorted_beam_ids, axis=-1)  # shape (batch, total_dim, 1)
         mask = mx.equal(sorted_beam_ids_exp, beam_range)  # shape (batch, total_dim, self.beams)
         positions_extended = mx.expand_dims(positions, axis=-1)  # shape (batch, total_dim, 1)
-        positions_masked = mx.where(mask, positions_extended, mx.full_like(positions_extended, total_dim))
+        positions_masked = mx.where(mask, positions_extended, mx.full(positions_extended.shape, total_dim, dtype=positions_extended.dtype))
         first_occurrence = mx.min(positions_masked, axis=1)  # shape (batch, self.beams)
         batch_indices = mx.arange(batch, dtype=mx.int32).reshape((batch, 1))
         batch_indices = batch_indices.broadcast_to((batch, self.beams))  # shape (batch, self.beams)
