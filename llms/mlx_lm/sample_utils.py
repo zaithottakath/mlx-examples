@@ -316,4 +316,5 @@ class BeamSearchSampler:
         combined_scores = mx.reshape(combined_scores, (batch, self.beams, vocab_size))
         # Flatten scores to (batch, beams*vocab_size)
         flat_scores = mx.reshape(combined_scores, (batch, self.beams * vocab_size))
+        total_dim = self.beams * vocab_size
         return self._beam_search(flat_scores, vocab_size, batch, self.beams, total_dim, combined_scores)
