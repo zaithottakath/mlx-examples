@@ -286,6 +286,14 @@ class BeamSearchSampler:
                     selected[beam_id] = (token, score, i)
                 if len(selected) == self.beams:
                     break
+            # If not all beams are represented, fill missing beam_ids with a default candidate from that beam.
+            for beam_id in range(self.beams):
+                if beam_id not in selected:
+                    beam_row = combined_scores[b, beam_id, :]
+                    token_candidate = int(mx.argmax(beam_row, axis=-1).item())
+                    candidate_index = beam_id * vocab_size + token_candidate
+                    score_candidate = float(beam_row[token_candidate].item())
+                    selected[beam_id] = (token_candidate, score_candidate, candidate_index)
             for beam_id in sorted(selected.keys()):
                 token, score, i = selected[beam_id]
                 next_token_ids_list.append(token)
