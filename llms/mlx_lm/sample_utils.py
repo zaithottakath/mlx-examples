@@ -255,23 +255,25 @@ class BeamSearchSampler:
 
     def __call__(self, next_token_logits: mx.array, sequence_weights: mx.array, _):
         # next_token_logits: shape (batch * beams, vocab_size)
+        # Compute log probabilities with temperature scaling.
         logprobs = mx.log(mx.softmax(next_token_logits / self.temperature, axis=-1))
-        # Add sequence weights: shape (batch * beams,) -> (batch * beams, 1)
-        weights = logprobs + mx.expand_dims(sequence_weights, axis=-1)
-        # Determine batch size and vocab size
+        # Add previous cumulative sequence weights:
+        # Reshape sequence_weights from (batch*beams,) to (batch*beams, 1) and add to logprobs.
+        combined_scores = mx.reshape(sequence_weights, (-1, 1)) + logprobs  # shape: (batch*beams, vocab_size)
+        # Determine batch size and vocabulary size.
         batch = sequence_weights.shape[0] // self.beams
         vocab_size = next_token_logits.shape[-1]
-        # Reshape weights to (batch, beams, vocab_size)
-        weights_beam = mx.reshape(weights, (batch, self.beams, vocab_size))
-        # For each beam in each batch, select the token with highest weight
-        next_tokens = mx.argmax(weights_beam, axis=-1)  # shape: (batch, beams)
-        beam_scores = mx.max(weights_beam, axis=-1)      # shape: (batch, beams)
-        # Construct beam_indices as the beam position index for each beam candidate.
-        beam_idx = mx.arange(self.beams, dtype=mx.int32)  # shape: (beams,)
-        beam_idx = mx.reshape(beam_idx, (1, self.beams))
-        beam_idx = mx.tile(beam_idx, (batch, 1))           # shape: (batch, beams)
-        # Flatten outputs
+        # Reshape combined scores to form a candidate matrix of shape (batch, beams*vocab_size)
+        combined_scores = mx.reshape(combined_scores, (batch, self.beams * vocab_size))
+        # From the union of all candidate extensions for each batch, select the top 'beams' candidates globally.
+        topk_scores, topk_indices = mx.topk(combined_scores, k=self.beams, axis=1)
+        # For each selected candidate, compute:
+        #   - the originating beam index: floor_divide(candidate_index, vocab_size)
+        #   - the token index: candidate_index mod vocab_size.
+        selected_beam_indices = mx.floor_divide(topk_indices, vocab_size)
+        next_tokens = topk_indices % vocab_size
+        # Flatten outputs to form shape (batch*beams, 1) for tokens and (batch*beams,) for beam indices and scores.
         next_token_ids = mx.reshape(next_tokens, (-1, 1))
-        beam_indices = mx.reshape(beam_idx, (-1,))
-        beam_scores = mx.reshape(beam_scores, (-1,))
+        beam_indices = mx.reshape(selected_beam_indices, (-1,))
+        beam_scores = mx.reshape(topk_scores, (-1,))
         return next_token_ids, beam_indices, beam_scores
