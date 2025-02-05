@@ -273,6 +273,11 @@ def generate_step(
     )
 
     sampler = sampler or (lambda x: mx.argmax(x, axis=-1))
+    using_beam = hasattr(sampler, "beams") and sampler.beams > 1
+    if using_beam:
+        # For beam search, assume single-batch; tile prompt for beams and initialize beam sequence weights.
+        y = mx.tile(mx.expand_dims(y, axis=0), (sampler.beams, 1))
+        beam_sequence_weights = mx.zeros((sampler.beams,), dtype=mx.float32)
 
     def _step(y):
         with mx.stream(generation_stream):
@@ -292,36 +297,65 @@ def generate_step(
             y = sampler(logprobs)
             return y, logprobs.squeeze(0)
 
-    with mx.stream(generation_stream):
-        total_prompt_tokens = y.size
-        prompt_processed_tokens = 0
-        while y.size > prefill_step_size:
-            model(y[:prefill_step_size][None], cache=prompt_cache)
-            quantize_cache_fn(prompt_cache)
-            mx.eval([c.state for c in prompt_cache])
-            prompt_progress_callback(prompt_processed_tokens, total_prompt_tokens)
-            prompt_processed_tokens += prefill_step_size
-            y = y[prefill_step_size:]
-            mx.metal.clear_cache()
+    def _step_beam(y, beam_sequence_weights):
+         with mx.stream(generation_stream):
+              logits = model(y, cache=prompt_cache)
+              logits = logits[:, -1, :]
+              if logits_processors:
+                  for processor in logits_processors:
+                      logits = processor(y, logits)
+              quantize_cache_fn(prompt_cache)
+              logprobs = logits - mx.logsumexp(logits, keepdims=True)
+              next_token_ids, beam_indices, beam_scores = sampler(logprobs, beam_sequence_weights, None)
+              new_beams = []
+              for i in range(sampler.beams):
+                  selected_beam = y[beam_indices[i]]
+                  new_beam = mx.concatenate([selected_beam, next_token_ids[i]], axis=-1)
+                  new_beams.append(new_beam)
+              new_y = mx.stack(new_beams, axis=0)
+              return new_y, beam_scores
 
-        y, logprobs = _step(y)
-
-    mx.async_eval(y, logprobs)
-    n = 0
-    while True:
-        if n != max_tokens:
-            next_y, next_logprobs = _step(y)
-            mx.async_eval(next_y, next_logprobs)
-        if n == 0:
-            mx.eval(y)
-            prompt_progress_callback(total_prompt_tokens, total_prompt_tokens)
-        if n == max_tokens:
-            break
-        yield y.item(), logprobs
-        if n % 256 == 0:
-            mx.metal.clear_cache()
-        y, logprobs = next_y, next_logprobs
-        n += 1
+    if not using_beam:
+        with mx.stream(generation_stream):
+            total_prompt_tokens = y.size
+            prompt_processed_tokens = 0
+            while y.size > prefill_step_size:
+                model(y[:prefill_step_size][None], cache=prompt_cache)
+                quantize_cache_fn(prompt_cache)
+                mx.eval([c.state for c in prompt_cache])
+                prompt_progress_callback(prompt_processed_tokens, total_prompt_tokens)
+                prompt_processed_tokens += prefill_step_size
+                y = y[prefill_step_size:]
+                mx.metal.clear_cache()
+            y, logprobs = _step(y)
+        mx.async_eval(y, logprobs)
+        n = 0
+        while True:
+            if n != max_tokens:
+                next_y, next_logprobs = _step(y)
+                mx.async_eval(next_y, next_logprobs)
+            if n == 0:
+                mx.eval(y)
+                prompt_progress_callback(total_prompt_tokens, total_prompt_tokens)
+            if n == max_tokens:
+                break
+            yield y.item(), logprobs
+            if n % 256 == 0:
+                mx.metal.clear_cache()
+            y, logprobs = next_y, next_logprobs
+            n += 1
+    else:
+        n = 0
+        while n < max_tokens:
+            y, beam_scores = _step_beam(y, beam_sequence_weights)
+            beam_sequence_weights = beam_scores
+            best_idx = int(mx.argmax(beam_sequence_weights).item())
+            best_token = y[best_idx][-1]
+            yield best_token, beam_sequence_weights[best_idx]
+            if n % 256 == 0:
+                mx.metal.clear_cache()
+            n += 1
+        return
 
 
 def speculative_generate_step(
