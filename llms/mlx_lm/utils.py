@@ -570,7 +570,7 @@ def stream_generate(
                 prompt_tps = prompt.size / prompt_time
                 tic = time.perf_counter()
             token_int = token if isinstance(token, int) else int(token.item())
-            if not using_beam and token_int in tokenizer.eos_token_ids:
+            if token_int in tokenizer.eos_token_ids:
                 break
 
             detokenizer.add_token(token_int)
