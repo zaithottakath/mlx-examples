@@ -16,7 +16,7 @@ def beam_search_impl(flat_scores: mx.array, vocab_size: int, batch: int, beams: 
     # Subtract a small bias to favor lower indices in tie-breaking.
     flat_scores = flat_scores - bias * 1e-6
     # Get indices that sort the flat_scores in descending order using a stable sort.
-    sorted_idx = mx.argsort(flat_scores, axis=1, descending=True).astype(mx.int32)
+    sorted_idx = mx.argsort(-flat_scores, axis=1).astype(mx.int32)
     # Retrieve sorted scores.
     sorted_scores = mx.take_along_axis(flat_scores, sorted_idx, axis=1)
     # Derive beam and token indices from the sorted indices.
