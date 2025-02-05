@@ -8,7 +8,7 @@ import mlx.core as mx
 import os
 import logging
 
-@partial(mx.compile)
+@mx.compile
 def beam_search_impl(flat_scores: mx.array, vocab_size: int, batch: int, beams: int, total_dim: int, combined_scores: mx.array):
     bias = -mx.arange(total_dim, dtype=flat_scores.dtype)
     bias = mx.reshape(bias, (1, total_dim))
