@@ -223,8 +223,13 @@ class KVCache(_BaseCache):
     def update_and_fetch(self, keys, values):
         prev = self.offset
         if keys.shape[0] != self.batch_size:
-            keys = mx.tile(keys, (self.batch_size, 1, 1, 1))
-            values = mx.tile(values, (self.batch_size, 1, 1, 1))
+            if keys.shape[0] > self.batch_size:
+                keys = keys[:self.batch_size]
+                values = values[:self.batch_size]
+            else:
+                multiplier = self.batch_size // keys.shape[0]
+                keys = mx.tile(keys, (multiplier, 1, 1, 1))
+                values = mx.tile(values, (multiplier, 1, 1, 1))
         if self.keys is None or (prev + keys.shape[2]) > self.keys.shape[2]:
             B = self.batch_size
             n_kv_heads = keys.shape[1]
