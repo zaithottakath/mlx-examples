@@ -10,8 +10,8 @@ import logging
 
 @mx.compile
 def beam_search_impl(flat_scores: mx.array, vocab_size: int, batch: int, beams: int, total_dim: int, combined_scores: mx.array):
-    # Create a bias vector for tie-breaking; negative values ensure stability in sorting.
-    bias = -mx.arange(total_dim, dtype=flat_scores.dtype)
+    # Create a bias vector for tie-breaking.
+    bias = mx.arange(total_dim, dtype=flat_scores.dtype)
     bias = mx.reshape(bias, (1, total_dim))
     # Add a small bias to the scores.
     flat_scores = flat_scores + bias * 1e-6
