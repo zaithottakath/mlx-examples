@@ -262,6 +262,7 @@ class KVCache(_BaseCache):
     def state(self, v):
         self.keys, self.values = v
         self.offset = self.keys.shape[2]
+        self.batch_size = self.keys.shape[0]
 
     def is_trimmable(self):
         return True
